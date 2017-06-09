@@ -1,0 +1,11 @@
+/bin
+/lib
+/domlib
+/build
+Makefile
+*.o
+*.swp
+*.svn
+*.tree
+*.graph
+*.tar.gz
