@@ -28,8 +28,6 @@
 static const char DIMACS_COMMENT = 'c';
 static const char DIMACS_PROBLEM = 'p';
 static const char DIMACS_ARC = 'a';
-static const char DIMACS_NODE_DESCRIPTOR = 'n';
-static const char DIMACS_EDGE = 'e';
 
 
 

@@ -141,16 +141,18 @@ void bowstring_build_tree(
       build_rst_tree(nvtxs,xadj,adjncy,adjmask);
       break;
     case BOWSTRING_TREE_DFS:
-      build_dfs_tree(nvtxs,xadj,adjncy,vtx_rand(0,nvtxs),NULL,NULL,NULL,
+      build_dfs_tree(nvtxs,xadj,adjncy,vtx_rand(0,nvtxs),NULL,NULL,NULL, \
           adjmask);
+      break;
     case BOWSTRING_TREE_BFS:
-      build_bfs_tree(nvtxs,xadj,adjncy,vtx_rand(0,nvtxs),NULL,NULL,NULL,
+      build_bfs_tree(nvtxs,xadj,adjncy,vtx_rand(0,nvtxs),NULL,NULL,NULL, \
           adjmask);
+      break;
     default:
       dl_error("Unknown tree type '%d'\n",treetype);
   }
 
-  apply_edge_mask(nvtxs,xadj,adjncy,adjwgt,adjmask,r_xadj,r_adjncy,
+  apply_edge_mask(nvtxs,xadj,adjncy,adjwgt,adjmask,r_xadj,r_adjncy, \
       r_adjwgt);
 
   if (r_adjmask) {

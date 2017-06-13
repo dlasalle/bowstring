@@ -28,7 +28,6 @@
 
 
 static size_t const MIN_PSEUDO_SHUFFLE = 64;
-static adj_t const NULL_PARENT_EDGE = (adj_t)-1;
 static vtx_t const NULL_PARENT = (vtx_t)-1;
 
 
