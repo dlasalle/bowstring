@@ -10,13 +10,6 @@
 
 
 
-#ifndef DISABLE_ZLIB
-#include <zlib.h>
-#endif
-
-
-
-
 /* prefixing ugliness */
 #define BSCOMP_PRE2(prefix,suffix) __ ## prefix ## _ ## suffix
 #define BSCOMP_PRE1(prefix,suffix) BSCOMP_PRE2(prefix,suffix)
@@ -42,197 +35,6 @@ static const size_t __BUFFERSIZE = 0x4000ULL;
 * FUNCTIONS *******************************************************************
 ******************************************************************************/
 
-
-#ifndef DISABLE_ZLIB
-static int BSCOMP_PRI(gzip_uncompress)(
-    file_t * const file,
-    const size_t slen,
-    unsigned char * const dst,
-    const size_t dlen)
-{
-  int rv;
-  size_t have, pos, size, read;
-  z_stream strm;
-  unsigned char in[__BUFFERSIZE];
-
-  rv = BOWSTRING_SUCCESS;
-  
-  pos = 0;
-  read = 0;
-
-  strm.zalloc = Z_NULL;
-  strm.zfree = Z_NULL;
-  strm.opaque = Z_NULL;
-  strm.avail_in = 0;
-  strm.next_in = Z_NULL;
-
-  if ((rv = inflateInit(&strm)) != Z_OK) {
-    if (rv == Z_MEM_ERROR) {
-      rv = BOWSTRING_ERROR_NOTENOUGHMEMORY;;
-      goto END;
-    } else if (rv == Z_STREAM_ERROR) {
-      rv = BOWSTRING_ERROR_INVALIDVALUE;;
-      goto END;
-    } else {
-      rv = BOWSTRING_ERROR_UNKNOWN;;
-      goto END;
-    }
-  }
-
-  while (pos < dlen) {
-    printf("Read pos == %zu/%zu of %zu/%zu\n",pos,read,dlen,slen);
-    size = dl_min(__CHUNK_SIZE,dlen-pos);
- 
-    strm.avail_out = size;
-    strm.next_out = dst+pos;
-
-    pos += size;
-
-    do {
-      have = dl_min(__BUFFERSIZE,slen-read);
-      strm.avail_in = fread(in,1,have,file->fd);
-      if (ferror(file->fd)) {
-        (void)inflateEnd(&strm);
-        eprintf("Failed to read from file\n.");
-        rv = BOWSTRING_ERROR_FILEREAD;;
-        goto END;
-      }
-      if (strm.avail_in != have) {
-        (void)inflateEnd(&strm);
-        eprintf("have = %zu/%zu\n",have,(size_t)strm.avail_in);
-        rv = BOWSTRING_ERROR_FILEREAD;;
-        goto END;
-      }
-
-      read += strm.avail_in;
-      strm.next_in = in;
-
-      printf("slen = %zu, read = %zu\n",slen,read);
-      printf("Before strm.avail_out = %zu, strm.avail_in = %zu\n",
-          (size_t)strm.avail_out,(size_t)strm.avail_in);
-
-      rv = inflate(&strm,Z_NO_FLUSH);
-
-      printf("After strm.avail_out = %zu, strm.avail_in = %zu\n",
-          (size_t)strm.avail_out,(size_t)strm.avail_in);
-      switch (rv) {
-        case Z_STREAM_ERROR:
-          eprintf("Call to inflate() failed with Z_STREAM_ERROR.\n");
-          rv = BOWSTRING_ERROR_UNKNOWN;
-          goto END;
-        case Z_DATA_ERROR:
-          eprintf("Call to inflate() failed with Z_DATA_ERROR.\n");
-          rv = BOWSTRING_ERROR_UNKNOWN;
-          goto END;
-        case Z_NEED_DICT:
-          eprintf("Call to inflate() failed with Z_NEED_DICT.\n");
-          rv = BOWSTRING_ERROR_INVALIDINPUT;
-          goto END;
-        case Z_MEM_ERROR:
-          eprintf("Call to inflate() failed with Z_MEM_ERROR.\n");
-          rv = BOWSTRING_ERROR_NOTENOUGHMEMORY;
-          goto END;
-      }
-    } while (strm.avail_in == 0 && strm.avail_out > 0);
-    if (rv == Z_STREAM_END && pos < dlen) {
-      eprintf("Prematurely reached end of compressed stream.\n");
-      eprintf("Read pos == %zu/%zu of %zu/%zu\n",pos,read,dlen,slen);
-      rv = BOWSTRING_ERROR_INVALIDINPUT;
-      goto END;
-    }
-  } 
-  if (rv != Z_STREAM_END) {
-    eprintf("Did not find end of compressed data stream.\n");
-    rv = BOWSTRING_ERROR_INVALIDINPUT;
-    goto END;
-  }
-
-  printf("Read %zu/%zu bytes from %zu bytes\n",pos,dlen,slen);
-
-  END:
-
-  (void)inflateEnd(&strm);
-
-  return rv;
-}
-
-
-static int BSCOMP_PRI(gzip_compress)(
-    const unsigned char * const src, 
-    const size_t slen, 
-    file_t * const dst, 
-    size_t * const r_dlen, 
-    const int level)
-{
-  int rv, flush;
-  size_t dlen, have, pos, size;
-  z_stream strm;
-  unsigned char out[__BUFFERSIZE];
-
-  pos = dlen = 0;
-
-  if (slen == 0) {
-    return BOWSTRING_SUCCESS;
-  }
-
-  strm.zalloc = Z_NULL;
-  strm.zfree = Z_NULL;
-  strm.opaque = Z_NULL;
-  if ((rv = deflateInit(&strm,level)) != Z_OK) {
-    if (rv == Z_MEM_ERROR) {
-      return BOWSTRING_ERROR_NOTENOUGHMEMORY;
-    } else if (rv == Z_STREAM_ERROR) {
-      return BOWSTRING_ERROR_INVALIDVALUE;
-    } else {
-      return BOWSTRING_ERROR_UNKNOWN;
-    }
-  }
-
-  do {
-    printf("Write pos == %zu\n",pos);
-    size = dl_min(__CHUNK_SIZE,slen-pos);
-
-    strm.avail_in = size;
-    strm.next_in = (unsigned char *)(src+pos);
-    pos += size;
-
-    flush = size+pos == slen ? Z_FINISH : Z_NO_FLUSH;
-
-    do {
-      strm.avail_out = __BUFFERSIZE;
-      strm.next_out = out;
-
-      rv = deflate(&strm,flush);
-      if (rv == Z_STREAM_ERROR) {
-        (void)deflateEnd(&strm);
-        eprintf("Call to deflate() failed.\n");
-        return BOWSTRING_ERROR_UNKNOWN;
-      }
-
-      have = __BUFFERSIZE - strm.avail_out;
-      if (fwrite(out,1,have,dst->fd) != have || ferror(dst->fd)) {
-        (void)deflateEnd(&strm);
-        eprintf("Call to fwrite() failed.\n");
-        return BOWSTRING_ERROR_FILEWRITE;
-      }
-      dlen += have;
-    } while (strm.avail_out == 0);
-
-    if (strm.avail_in > 0) {
-      (void)deflateEnd(&strm);
-      eprintf("Premature end of stream.\n");
-      return BOWSTRING_ERROR_UNKNOWN;
-    }
-  } while (flush != Z_FINISH);
-
-  printf("Wrote %zu/%zu bytes to %zu bytes\n",pos,slen,dlen);
-
-  (void)deflateEnd(&strm);
-  *r_dlen = dlen;
-
-  return BOWSTRING_SUCCESS;
-}
-#endif
 
 
 #ifdef BSCOMP_TYPE_FLOAT
@@ -276,28 +78,6 @@ static int BSCOMP_PRI(read)(
           goto END;
         }
         break;
-      #ifndef DISABLE_ZLIB
-      case BOWSTRING_COMPRESSION_GZIP1:
-      case BOWSTRING_COMPRESSION_GZIP2:
-      case BOWSTRING_COMPRESSION_GZIP3:
-      case BOWSTRING_COMPRESSION_GZIP4:
-      case BOWSTRING_COMPRESSION_GZIP5:
-      case BOWSTRING_COMPRESSION_GZIP6:
-      case BOWSTRING_COMPRESSION_GZIP7:
-      case BOWSTRING_COMPRESSION_GZIP8:
-      case BOWSTRING_COMPRESSION_GZIP9:
-        if (fread(&b64,sizeof(uint64_t),1,file->fd) != 1) {
-          rv = BOWSTRING_ERROR_FILEREAD;;
-          goto END;
-        }
-        if ((rv = BSCOMP_PRI(gzip_uncompress)(file,b64, \
-                (unsigned char *)big_buffer,sizeof(BSCOMP_BIG_T)*len) \
-              ) != BOWSTRING_SUCCESS) {
-          eprintf("Decompression failed.\n");
-          goto END;
-        }
-        break;
-      #endif
       default:
         dl_error("Unsupported compression type: '%d'\n",compression);
     }
@@ -326,28 +106,6 @@ static int BSCOMP_PRI(read)(
           goto END;
         }
         break;
-      #ifndef DISABLE_ZLIB
-      case BOWSTRING_COMPRESSION_GZIP1:
-      case BOWSTRING_COMPRESSION_GZIP2:
-      case BOWSTRING_COMPRESSION_GZIP3:
-      case BOWSTRING_COMPRESSION_GZIP4:
-      case BOWSTRING_COMPRESSION_GZIP5:
-      case BOWSTRING_COMPRESSION_GZIP6:
-      case BOWSTRING_COMPRESSION_GZIP7:
-      case BOWSTRING_COMPRESSION_GZIP8:
-      case BOWSTRING_COMPRESSION_GZIP9:
-        if (fread(&b64,sizeof(uint64_t),1,file->fd) != 1) {
-          rv = BOWSTRING_ERROR_FILEREAD;
-          goto END;
-        }
-        if ((rv = BSCOMP_PRI(gzip_uncompress)(file,b64,
-                (unsigned char *)small_buffer,sizeof(BSCOMP_SMALL_T)*len)
-              ) != BOWSTRING_SUCCESS) {
-          eprintf("Decompression failed.\n");
-          goto END;
-        }
-        break;
-      #endif
       default:
         dl_error("Unsupported compression type: '%d'\n",compression);
     }
@@ -373,9 +131,6 @@ static int BSCOMP_PRI(write)(
     const int compression) 
 {
   int rv;
-  #ifndef DISABLE_ZLIB
-  int level;
-  #endif
   uint64_t b64,i;
   BSCOMP_BIG_T * x = NULL;
   BSCOMP_SMALL_T * y = NULL; 
@@ -407,32 +162,6 @@ static int BSCOMP_PRI(write)(
         fwrite(&b64,sizeof(uint64_t),1,file->fd);
         fwrite(big_buffer,sizeof(BSCOMP_BIG_T),len,file->fd);
         break;
-      #ifndef DISABLE_ZLIB
-      case BOWSTRING_COMPRESSION_GZIP1:
-      case BOWSTRING_COMPRESSION_GZIP2:
-      case BOWSTRING_COMPRESSION_GZIP3:
-      case BOWSTRING_COMPRESSION_GZIP4:
-      case BOWSTRING_COMPRESSION_GZIP5:
-      case BOWSTRING_COMPRESSION_GZIP6:
-      case BOWSTRING_COMPRESSION_GZIP7:
-      case BOWSTRING_COMPRESSION_GZIP8:
-      case BOWSTRING_COMPRESSION_GZIP9:
-        level = compression-BOWSTRING_COMPRESSION_GZIP1+1;
-        dprintf("Using GZIP compression level %d\n",level);
-        /* skip writing size and compress */
-        dl_mark_file(file);
-        fseek(file->fd,sizeof(uint64_t),SEEK_CUR);
-        if ((rv = BSCOMP_PRI(gzip_compress)((const unsigned char *)big_buffer,
-            sizeof(BSCOMP_BIG_T)*len,file,&b64,level)) != BOWSTRING_SUCCESS) {
-          eprintf("Compression failed.\n");
-          goto END;
-        }
-        /* go back and write compressed size */
-        dl_restore_file(file);
-        fwrite(&b64,sizeof(uint64_t),1,file->fd);
-        fseek(file->fd,b64,SEEK_CUR);
-        break;
-      #endif
       default:
         dl_error("Unsupported compression type: '%d'\n",compression);
     }
@@ -455,33 +184,6 @@ static int BSCOMP_PRI(write)(
         fwrite(&b64,sizeof(uint64_t),1,file->fd);
         fwrite(small_buffer,sizeof(BSCOMP_SMALL_T),len,file->fd);
         break;
-      #ifndef DISABLE_ZLIB
-      case BOWSTRING_COMPRESSION_GZIP1:
-      case BOWSTRING_COMPRESSION_GZIP2:
-      case BOWSTRING_COMPRESSION_GZIP3:
-      case BOWSTRING_COMPRESSION_GZIP4:
-      case BOWSTRING_COMPRESSION_GZIP5:
-      case BOWSTRING_COMPRESSION_GZIP6:
-      case BOWSTRING_COMPRESSION_GZIP7:
-      case BOWSTRING_COMPRESSION_GZIP8:
-      case BOWSTRING_COMPRESSION_GZIP9:
-        level = compression-BOWSTRING_COMPRESSION_GZIP1+1;
-        dprintf("Using GZIP compression level %d\n",level);
-        /* skip writing size and compress */
-        dl_mark_file(file);
-        fseek(file->fd,sizeof(uint64_t),SEEK_CUR);
-        if ((rv = BSCOMP_PRI(gzip_compress)(
-              (const unsigned char *)small_buffer,sizeof(BSCOMP_SMALL_T)*len,
-            file,&b64,level)) != BOWSTRING_SUCCESS) {
-          eprintf("Compression failed.\n");
-          goto END;
-        }
-        /* go back and write compressed size */
-        dl_restore_file(file);
-        fwrite(&b64,sizeof(uint64_t),1,file->fd);
-        fseek(file->fd,b64,SEEK_CUR);
-        break;
-      #endif
       default:
         dl_error("Unsupported compression type: '%d'\n",compression);
     }

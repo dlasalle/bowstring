@@ -37,6 +37,8 @@ show_help() {
   echo "    Build with debugging symbols and turn optimizations off."
   echo "  --assert"
   echo "    Build with assertions on."
+  echo "  --devel"
+  echo "    Turn on development warnings."
   echo "  --prefix=<prefix>"
   echo "    Set the install prefix."
   echo "  --shared"
@@ -51,8 +53,6 @@ show_help() {
   echo "    Build the MPI programs."
   echo "  --no-omp"
   echo "    Build without OpenMP enabled."
-  echo "  --no-zlib"
-  echo "    Build without zlib support (disables some graph formats)."
   echo ""
 }
 
@@ -86,6 +86,10 @@ for i in "${@}"; do
     --assert)
     CONFIG_FLAGS="${CONFIG_FLAGS} -DASSERT=1"
     ;;
+    # development warnings
+    --devel)
+    CONFIG_FLAGS="${CONFIG_FLAGS} -DDEVEL=1"
+    ;;
     # prefix
     --prefix=*)
     CONFIG_FLAGS="${CONFIG_FLAGS} -DCMAKE_INSTALL_PREFIX=${i#*=}"
@@ -114,12 +118,8 @@ for i in "${@}"; do
     --no-omp)
     CONFIG_FLAGS="${CONFIG_FLAGS} -DNO_OMP=1"
     ;;
-    # disable zlib
-    --no-zlib)
-    CONFIG_FLAGS="${CONFIG_FLAGS} -DDISABLE_ZLIB=1"
-    ;;
-    *)
     # bad argument
+    *)
     die "Unknown option '${i}'"
     ;;
   esac

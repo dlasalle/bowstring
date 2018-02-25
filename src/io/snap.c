@@ -64,9 +64,10 @@ static void __quicksort_edges(vtx_t * const keys,
 {
   vtx_t mid;
   size_t i,j,k;
+  // we treat keys[0] as the pivot
   i = 1;
   j = n-1;
-  k = n >> 1;
+  k = n / 2;
   mid = keys[k];
   keys[k] = keys[0];
   while (i < j) {
@@ -93,7 +94,7 @@ static void __quicksort_edges(vtx_t * const keys,
     __quicksort_edges(keys,vals,i);
   }
   ++i; /* skip the pivot element */
-  if (n-i > 1) {
+  if (n > i+1) {
     __quicksort_edges(keys+i,vals+i,n-i);
   }
 } 
