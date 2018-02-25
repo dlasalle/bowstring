@@ -232,16 +232,16 @@ int read_snap_graph(const char * const filename, vtx_t * const r_nvtxs,
     sptr = eptr;
     v = labels[strtoull(sptr,&eptr,10)];
     sptr = eptr;
+
+    adjncy[xadj[u+1]] = v;
+    adjncy[xadj[v+1]] = u;
+
     if (do_adjwgt) {
       w = (wgt_t)strtod(sptr,&eptr);
       if (eptr == sptr) {
         /* if anyone is missing weight, we'll assign 1 */
         w = 1;
       }
-    }
-    adjncy[xadj[u+1]] = v;
-    adjncy[xadj[v+1]] = u;
-    if (do_adjwgt) {
       adjwgt[xadj[u+1]] = w;
       adjwgt[xadj[v+1]] = w;
     }
@@ -331,7 +331,6 @@ int read_snap_graph(const char * const filename, vtx_t * const r_nvtxs,
     dl_free(adjwgt);
   }
   return rv;
-
 }
 
 
